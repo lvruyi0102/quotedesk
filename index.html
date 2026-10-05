@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>报价回款台 · QuoteDesk</title>
+<style>
+  :root { --ink:#1c1917; --muted:#78716c; --line:#e7e5e4; --bg:#fafaf9; --card:#fff; --accent:#b45309; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: "Segoe UI", "PingFang SC", "Noto Sans SC", sans-serif; color:var(--ink); background:var(--bg); }
+  header { padding:20px 24px; border-bottom:1px solid var(--line); background:#fff; display:flex; justify-content:space-between; gap:16px; align-items:center; }
+  h1 { font-size:18px; margin:0; }
+  .sub { color:var(--muted); font-size:12px; margin-top:4px; }
+  main { display:grid; grid-template-columns: 340px 1fr; gap:16px; padding:16px; }
+  section { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px; }
+  label { display:block; font-size:12px; color:var(--muted); margin:10px 0 4px; }
+  input, select, textarea { width:100%; padding:8px 10px; border:1px solid var(--line); border-radius:8px; font:inherit; }
+  textarea { min-height:72px; }
+  table { width:100%; border-collapse:collapse; font-size:14px; }
+  th, td { border-bottom:1px solid var(--line); padding:8px 4px; text-align:left; }
+  .rowbtns button, .actions button { border:1px solid var(--line); background:#fff; border-radius:8px; padding:8px 12px; cursor:pointer; font:inherit; }
+  .primary { background:var(--ink)!important; color:#fff!important; border-color:var(--ink)!important; }
+  .money { font-variant-numeric: tabular-nums; font-weight:600; }
+  .warn { font-size:12px; color:#92400e; background:#fffbeb; border:1px solid #fde68a; padding:8px 10px; border-radius:8px; margin-top:12px; }
+  @media print { header .actions, .editor, .noprint { display:none!important; } main { display:block; } section { border:none; } }
+  @media (max-width: 900px) { main { grid-template-columns:1fr; } }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>报价回款台</h1>
+    <div class="sub">给自由职业者与小团队的报价、分期与催款草稿。本地保存，不上传服务器。非正式法律文书。</div>
+  </div>
+  <div class="actions" style="display:flex; gap:8px;">
+    <button onclick="window.print()">打印 / 导出 PDF</button>
+    <button class="primary" onclick="save()">保存到本机</button>
+  </div>
+</header>
+<main>
+  <section class="editor">
+    <label>你的名称</label>
+    <input id="seller" placeholder="工作室 / 个人" />
+    <label>客户名称</label>
+    <input id="client" placeholder="客户公司或个人" />
+    <label>项目名称</label>
+    <input id="project" placeholder="例如：品牌官网改版" />
+    <label>币种</label>
+    <select id="currency"><option>CNY</option><option>USD</option></select>
+    <label>报价条目（每行：名称 | 数量 | 单价）</label>
+    <textarea id="lines">需求梳理与方案 | 1 | 3000
+页面设计 | 5 | 800
+前端实现 | 5 | 1200</textarea>
+    <label>税率（% ，不含税填 0）</label>
+    <input id="tax" type="number" value="0" />
+    <label>预付款比例（%）</label>
+    <input id="deposit" type="number" value="40" />
+    <label>交付天数</label>
+    <input id="days" type="number" value="21" />
+    <div class="rowbtns" style="margin-top:12px; display:flex; gap:8px;">
+      <button class="primary" onclick="render()">生成报价</button>
+      <button onclick="addSample()">示例</button>
+    </div>
+    <div class="warn">本合同草稿仅供商务沟通起点。金额、知识产权、违约与发票条款须由你与客户确认；涉及正式签约请咨询持证专业人士。不构成法律、税务或投资建议。</div>
+  </section>
+  <section id="out"></section>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+function money(n, c){ return (c==='USD'?'$':'¥') + n.toFixed(2); }
+function parseLines(){
+  return $('lines').value.split('\n').map(l=>l.trim()).filter(Boolean).map(l=>{
+    const p=l.split('|').map(s=>s.trim());
+    return { name:p[0]||'未命名', qty:Number(p[1]||1), price:Number(p[2]||0) };
+  });
+}
+function render(){
+  const items=parseLines();
+  const sub=items.reduce((s,i)=>s+i.qty*i.price,0);
+  const tax=sub*Number($('tax').value||0)/100;
+  const total=sub+tax;
+  const dep=total*Number($('deposit').value||0)/100;
+  const rest=total-dep;
+  const cur=$('currency').value;
+  const seller=$('seller').value||'（未填）';
+  const client=$('client').value||'（未填）';
+  const project=$('project').value||'（未填）';
+  const days=Number($('days').value||0);
+  $('out').innerHTML = `
+    <h2 style="margin-top:0">报价单</h2>
+    <p>卖方：${esc(seller)}　买方：${esc(client)}<br>项目：${esc(project)}　有效期：7 天</p>
+    <table>
+      <tr><th>项目</th><th>数量</th><th>单价</th><th>小计</th></tr>
+      ${items.map(i=>`<tr><td>${esc(i.name)}</td><td>${i.qty}</td><td class="money">${money(i.price,cur)}</td><td class="money">${money(i.qty*i.price,cur)}</td></tr>`).join('')}
+    </table>
+    <p>不含税小计 <span class="money">${money(sub,cur)}</span>　税额 <span class="money">${money(tax,cur)}</span><br>
+    <strong>合计 ${money(total,cur)}</strong></p>
+    <h3>建议收款节奏</h3>
+    <p>开工预付 ${money(dep,cur)}（${$('deposit').value||0}%）。验收后支付尾款 ${money(rest,cur)}。预计交付 ${days} 天，自预付款到账次日计算。</p>
+    <h3>商务条款草稿</h3>
+    <ol>
+      <li>范围以本报价列明的条目为限。新增需求另行报价。</li>
+      <li>买方应按约支付。逾期超过 7 日，卖方可暂停交付。</li>
+      <li>尾款结清前，成果的使用权归卖方。结清后，买方获得约定用途的使用权。卖方保留用于作品集展示的权利，除非买方书面要求保密。</li>
+      <li>双方确认本草稿不是正式合同，正式文本以双方签署文件为准。</li>
+    </ol>
+    <h3>催款短信草稿</h3>
+    <p>您好，${esc(project)} 的${rest>0?'尾款':'款项'} ${money(rest||total,cur)} 已到约定节点。方便的话请今天确认付款安排，我收到后立即安排后续交付。谢谢。</p>
+  `;
+  save();
+}
+function esc(s){ return String(s).replace(/[&<>]/g, c=>({'&':'&','<':'<','>':'>'}[c])); }
+function save(){
+  const data={};
+  ['seller','client','project','currency','lines','tax','deposit','days'].forEach(k=>data[k]=$(k).value);
+  localStorage.setItem('quotedesk', JSON.stringify(data));
+}
+function load(){
+  try{
+    const data=JSON.parse(localStorage.getItem('quotedesk')||'{}');
+    Object.entries(data).forEach(([k,v])=>{ if($(k)) $(k).value=v; });
+  }catch(e){}
+  render();
+}
+function addSample(){ $('seller').value='独立设计工作室'; $('client').value='示例客户'; $('project').value='品牌官网改版'; render(); }
+load();
+</script>
+</body>
+</html>
